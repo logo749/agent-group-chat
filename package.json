@@ -1,0 +1,29 @@
+{
+  "name": "agent-group-chat",
+  "version": "0.1.0",
+  "description": "多角色 AI 群聊协作平台 — 你当群主，多个 AI 角色当团队，基于 opencode 在项目文件夹里干活",
+  "type": "module",
+  "main": "dist/server.js",
+  "bin": {
+    "agc": "dist/server.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.ts"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
