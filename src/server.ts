@@ -18,7 +18,20 @@ const PORT = parseInt(process.env.AGC_PORT || '8787', 10);
 
 const app = express();
 app.use(express.json());
-// 静态前端页面
+
+// ── CORS：允许 GitHub Pages 等外部前端连本地后端 ──
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(204);
+    return;
+  }
+  next();
+});
+
+// 静态前端页面（本地用）
 app.use(express.static(join(process.cwd(), 'public')));
 
 const server = createServer(app);
@@ -111,7 +124,7 @@ app.put('/api/groups/:name/announcement', (req, res) => {
   res.json({ ok: true });
 });
 
-// ── API：成员管理（Phase 2 完善）──
+// ── API：成员管理 ──
 
 app.get('/api/groups/:name/members', (req, res) => {
   const group = getGroup(req.params.name);
