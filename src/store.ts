@@ -39,12 +39,17 @@ export function createGroup(name: string, projectDir: string): GroupConfig {
   const dir = getGroupDir(name);
   if (existsSync(dir)) throw new Error(`群已存在: ${name}`);
 
+  const resolvedProjectDir = resolve(projectDir);
+
+  // 自动创建项目目录（opencode --dir 要求目录必须存在）
+  ensureDir(resolvedProjectDir);
+
   ensureDir(dir);
   ensureDir(join(dir, 'contexts'));
 
   const config: GroupConfig = {
     name,
-    projectDir: resolve(projectDir),
+    projectDir: resolvedProjectDir,
     members: [],
     createdAt: new Date().toISOString(),
   };
@@ -123,17 +128,11 @@ export function getUserRolesDir(): string {
   return join(DATA_DIR, 'roles');
 }
 
-/**
- * 列出所有可用角色：内置 + 用户自定义合并
- * 同名角色时用户自定义优先（覆盖内置）
- */
 export function listAgents(): AgentDefinition[] {
   const result: AgentDefinition[] = [];
   const seen = new Set<string>();
 
-  // 先加载内置角色
   loadAgentsFromDir(BUILTIN_ROLES_DIR, result, seen, false);
-  // 再加载用户自定义（同名覆盖）
   loadAgentsFromDir(getUserRolesDir(), result, seen, true);
 
   return result;
@@ -154,7 +153,6 @@ function loadAgentsFromDir(
       const content = readFileSync(join(dir, f), 'utf-8');
       const agent = parseAgentFile(content, id);
       if (seen.has(id)) {
-        // 替换已有的（用户自定义覆盖内置）
         const idx = out.findIndex(a => a.id === id);
         if (idx >= 0) out[idx] = agent;
       } else {
@@ -166,12 +164,10 @@ function loadAgentsFromDir(
 }
 
 export function getAgent(id: string): AgentDefinition | null {
-  // 先查用户自定义
   const userPath = join(getUserRolesDir(), `${id}.md`);
   if (existsSync(userPath)) {
     return parseAgentFile(readFileSync(userPath, 'utf-8'), id);
   }
-  // 再查内置
   const builtinPath = join(BUILTIN_ROLES_DIR, `${id}.md`);
   if (existsSync(builtinPath)) {
     return parseAgentFile(readFileSync(builtinPath, 'utf-8'), id);
@@ -179,10 +175,6 @@ export function getAgent(id: string): AgentDefinition | null {
   return null;
 }
 
-/**
- * 解析角色 .md 文件
- * 格式：frontmatter（--- 包裹）+ 正文（system prompt）
- */
 function parseAgentFile(content: string, id: string): AgentDefinition {
   const m = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
   if (!m) {
@@ -208,4 +200,4 @@ function parseAgentFile(content: string, id: string): AgentDefinition {
   };
 }
 
-export { DATA_DIR, BUILTIN_ROLES_DIR };
+export { DATA_DIR, BUILTIN_ROLES_DIR, ensureDir };
