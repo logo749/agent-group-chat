@@ -1,6 +1,7 @@
 /**
  * 本地文件存储层
  * 数据根目录 ~/.agc/，所有数据都是本地文件，不用数据库
+ * 角色加载：项目内置 roles/（跟着 git 走） + 用户自定义 ~/.agc/roles/
  */
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
@@ -13,6 +14,9 @@ import type { Message, GroupConfig, AgentDefinition } from './types.js';
 const DATA_DIR = process.env.AGC_DATA_DIR
   ? resolve(process.env.AGC_DATA_DIR)
   : join(homedir(), '.agc');
+
+// 项目内置角色目录（跟代码一起走）
+const BUILTIN_ROLES_DIR = resolve(process.cwd(), 'roles');
 
 // ── 初始化数据目录 ──
 function ensureDir(dir: string) {
@@ -46,7 +50,6 @@ export function createGroup(name: string, projectDir: string): GroupConfig {
   };
 
   writeFileSync(join(dir, 'group.json'), JSON.stringify(config, null, 2));
-  // 默认空公告
   writeFileSync(join(dir, 'announcement.md'), '# 群公告\n\n在这里写协作规则...\n');
 
   return config;
@@ -114,37 +117,71 @@ export function saveAnnouncement(groupName: string, content: string) {
   writeFileSync(path, content);
 }
 
-// ── 角色库 ──
+// ── 角色库（合并内置 + 用户自定义）──
 
-export function getRolesDir(): string {
+export function getUserRolesDir(): string {
   return join(DATA_DIR, 'roles');
 }
 
+/**
+ * 列出所有可用角色：内置 + 用户自定义合并
+ * 同名角色时用户自定义优先（覆盖内置）
+ */
 export function listAgents(): AgentDefinition[] {
-  const dir = getRolesDir();
-  if (!existsSync(dir)) return [];
-
   const result: AgentDefinition[] = [];
-  for (const f of readdirSync(dir)) {
-    if (!f.endsWith('.md')) continue;
-    try {
-      const content = readFileSync(join(dir, f), 'utf-8');
-      result.push(parseAgentFile(content, f.replace(/\.md$/, '')));
-    } catch { /* 跳过 */ }
-  }
+  const seen = new Set<string>();
+
+  // 先加载内置角色
+  loadAgentsFromDir(BUILTIN_ROLES_DIR, result, seen, false);
+  // 再加载用户自定义（同名覆盖）
+  loadAgentsFromDir(getUserRolesDir(), result, seen, true);
+
   return result;
 }
 
+function loadAgentsFromDir(
+  dir: string,
+  out: AgentDefinition[],
+  seen: Set<string>,
+  override: boolean
+) {
+  if (!existsSync(dir)) return;
+  for (const f of readdirSync(dir)) {
+    if (!f.endsWith('.md')) continue;
+    const id = f.replace(/\.md$/, '');
+    if (seen.has(id) && !override) continue;
+    try {
+      const content = readFileSync(join(dir, f), 'utf-8');
+      const agent = parseAgentFile(content, id);
+      if (seen.has(id)) {
+        // 替换已有的（用户自定义覆盖内置）
+        const idx = out.findIndex(a => a.id === id);
+        if (idx >= 0) out[idx] = agent;
+      } else {
+        out.push(agent);
+        seen.add(id);
+      }
+    } catch { /* 跳过坏文件 */ }
+  }
+}
+
 export function getAgent(id: string): AgentDefinition | null {
-  const path = join(getRolesDir(), `${id}.md`);
-  if (!existsSync(path)) return null;
-  return parseAgentFile(readFileSync(path, 'utf-8'), id);
+  // 先查用户自定义
+  const userPath = join(getUserRolesDir(), `${id}.md`);
+  if (existsSync(userPath)) {
+    return parseAgentFile(readFileSync(userPath, 'utf-8'), id);
+  }
+  // 再查内置
+  const builtinPath = join(BUILTIN_ROLES_DIR, `${id}.md`);
+  if (existsSync(builtinPath)) {
+    return parseAgentFile(readFileSync(builtinPath, 'utf-8'), id);
+  }
+  return null;
 }
 
 /**
  * 解析角色 .md 文件
  * 格式：frontmatter（--- 包裹）+ 正文（system prompt）
- * 参考 agency-orchestrator/src/agents/loader.ts 的 parseAgentFile
  */
 function parseAgentFile(content: string, id: string): AgentDefinition {
   const m = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
@@ -152,7 +189,6 @@ function parseAgentFile(content: string, id: string): AgentDefinition {
     return { id, name: id, description: '', emoji: '🤖', systemPrompt: content.trim() };
   }
 
-  // 简单解析 frontmatter（不用 js-yaml，结构简单）
   const meta: Record<string, string> = {};
   for (const line of m[1].split('\n')) {
     const idx = line.indexOf(':');
@@ -172,4 +208,4 @@ function parseAgentFile(content: string, id: string): AgentDefinition {
   };
 }
 
-export { DATA_DIR };
+export { DATA_DIR, BUILTIN_ROLES_DIR };
