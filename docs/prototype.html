@@ -6,207 +6,350 @@
 <title>Agent Group Chat - 原型</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: #1a1d23; color: #e0e0e0; height: 100vh; display: flex; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: #1a1d23; color: #e0e0e0; height: 100vh; display: flex; overflow: hidden; }
 
-  .sidebar { width: 220px; background: #22252b; border-right: 1px solid #333; display: flex; flex-direction: column; }
-  .sidebar-header { padding: 16px; font-weight: 600; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
-  .sidebar-header .proto-tag { font-size: 10px; background: #5b8def; padding: 2px 6px; border-radius: 3px; font-weight: normal; }
+  /* ── 左侧栏 ── */
+  .sidebar { width: 240px; background: #22252b; border-right: 1px solid #333; display: flex; flex-direction: column; flex-shrink: 0; }
+  .sidebar-header { padding: 14px 16px; font-weight: 600; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; font-size: 15px; }
+  .proto-tag { font-size: 10px; background: #5b8def; padding: 2px 6px; border-radius: 3px; font-weight: normal; }
   .group-list { flex: 1; overflow-y: auto; padding: 8px; }
-  .group-item { padding: 10px 12px; border-radius: 6px; cursor: pointer; margin-bottom: 2px; font-size: 14px; }
+  .group-item { padding: 8px 10px; border-radius: 6px; cursor: pointer; margin-bottom: 2px; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
   .group-item:hover { background: #2a2d33; }
   .group-item.active { background: #3a4050; }
-  .group-item .group-meta { font-size: 11px; color: #888; margin-top: 2px; }
-  .new-group-btn { margin: 8px; padding: 8px; border: 1px dashed #555; border-radius: 6px; text-align: center; cursor: pointer; font-size: 13px; color: #aaa; }
+  .group-info { flex: 1; min-width: 0; }
+  .group-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .group-meta { font-size: 11px; color: #888; margin-top: 2px; }
+  .group-actions { display: none; gap: 4px; flex-shrink: 0; }
+  .group-item:hover .group-actions { display: flex; }
+  .icon-btn { background: none; border: none; color: #888; cursor: pointer; font-size: 13px; padding: 2px 4px; border-radius: 3px; }
+  .icon-btn:hover { color: #fff; background: #444; }
+  .icon-btn.danger:hover { color: #e06c6c; }
+  .new-group-btn { margin: 8px; padding: 10px; border: 1px dashed #555; border-radius: 6px; text-align: center; cursor: pointer; font-size: 13px; color: #aaa; }
   .new-group-btn:hover { border-color: #888; color: #fff; }
 
-  .chat-area { flex: 1; display: flex; flex-direction: column; }
-  .chat-header { padding: 14px 20px; border-bottom: 1px solid #333; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
-  .chat-header .status-group { font-size: 12px; color: #888; font-weight: normal; display: flex; gap: 12px; }
-  .chat-header .status-ok { color: #4caf50; }
-  .announcement-bar { padding: 8px 20px; background: #2a2d33; border-bottom: 1px solid #333; font-size: 12px; color: #888; cursor: pointer; }
+  /* ── 中间聊天区 ── */
+  .chat-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .chat-header { padding: 12px 20px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
+  .chat-title { font-weight: 600; font-size: 15px; }
+  .chat-sub { font-size: 11px; color: #888; margin-top: 2px; }
+  .status-group { font-size: 12px; color: #888; display: flex; gap: 14px; }
+  .status-ok { color: #4caf50; }
+  .status-warn { color: #ff9800; }
+
+  .announcement-bar { padding: 8px 20px; background: #2a2d33; border-bottom: 1px solid #333; font-size: 12px; color: #888; cursor: pointer; display: flex; align-items: center; gap: 6px; }
   .announcement-bar:hover { color: #ccc; }
+  .announcement-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
 
   .messages { flex: 1; overflow-y: auto; padding: 20px; }
-  .msg { margin-bottom: 16px; max-width: 75%; animation: fadeIn 0.2s ease; }
+  .msg { margin-bottom: 14px; max-width: 72%; animation: fadeIn 0.2s ease; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
   .msg-user { margin-left: auto; }
-  .msg-meta { font-size: 12px; color: #888; margin-bottom: 4px; }
+  .msg-system { max-width: 100%; margin: 10px auto; text-align: center; }
+  .msg-meta { font-size: 11px; color: #888; margin-bottom: 4px; }
   .msg-bubble { padding: 10px 14px; border-radius: 10px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
   .msg-user .msg-bubble { background: #5b8def; color: #fff; border-bottom-right-radius: 2px; }
   .msg-agent .msg-bubble { background: #2a2d33; border-bottom-left-radius: 2px; }
+  .msg-system .msg-bubble { background: transparent; color: #777; font-style: italic; font-size: 13px; padding: 0; }
 
-  .typing-indicator { padding: 8px 20px; font-size: 13px; color: #888; font-style: italic; }
+  .typing-indicator { padding: 6px 20px; font-size: 13px; color: #888; font-style: italic; }
   .typing-dots::after { content: ''; animation: dots 1.5s steps(4, end) infinite; }
   @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
 
-  .input-area { padding: 16px 20px; border-top: 1px solid #333; display: flex; gap: 10px; }
+  .input-area { padding: 14px 20px; border-top: 1px solid #333; display: flex; gap: 10px; }
   .input-area textarea { flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid #333; background: #2a2d33; color: #fff; font-size: 14px; resize: none; height: 44px; font-family: inherit; }
-  .input-area button { padding: 0 20px; border-radius: 8px; border: none; background: #5b8def; color: #fff; cursor: pointer; font-size: 14px; }
+  .input-area textarea:focus { outline: none; border-color: #5b8def; }
+  .input-area button { padding: 0 22px; border-radius: 8px; border: none; background: #5b8def; color: #fff; cursor: pointer; font-size: 14px; }
   .input-area button:hover { background: #4a7de0; }
 
-  .rightbar { width: 240px; background: #22252b; border-left: 1px solid #333; padding: 16px; overflow-y: auto; }
-  .rightbar h3 { font-size: 13px; color: #888; margin-bottom: 10px; text-transform: uppercase; }
-  .member-item { padding: 6px 0; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
-  .member-status { font-size: 11px; color: #888; }
+  /* ── 右侧栏 ── */
+  .rightbar { width: 260px; background: #22252b; border-left: 1px solid #333; display: flex; flex-direction: column; flex-shrink: 0; }
+  .rightbar-section { padding: 14px 16px; border-bottom: 1px solid #333; overflow-y: auto; }
+  .rightbar-section:last-child { border-bottom: none; flex: 1; }
+  .rightbar h3 { font-size: 12px; color: #888; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between; align-items: center; }
+  .add-btn { font-size: 16px; color: #888; background: none; border: none; cursor: pointer; padding: 0 2px; line-height: 1; }
+  .add-btn:hover { color: #fff; }
+  .member-item { padding: 6px 0; font-size: 13px; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .member-left { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; }
+  .member-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .member-status { font-size: 10px; color: #888; flex-shrink: 0; }
   .member-status.thinking { color: #ff9800; }
   .member-status.replying { color: #4caf50; }
+  .member-status.error { color: #e06c6c; }
+  .remove-btn { background: none; border: none; color: #666; cursor: pointer; font-size: 12px; padding: 2px; opacity: 0; flex-shrink: 0; }
+  .member-item:hover .remove-btn { opacity: 1; }
+  .remove-btn:hover { color: #e06c6c; }
 
-  .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 100; align-items: center; justify-content: center; }
+  /* ── 弹窗 ── */
+  .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 100; align-items: center; justify-content: center; }
   .modal.show { display: flex; }
-  .modal-content { background: #2a2d33; border-radius: 12px; padding: 24px; width: 500px; max-height: 70vh; overflow-y: auto; }
-  .modal-content h2 { font-size: 18px; margin-bottom: 16px; }
-  .modal-content textarea { width: 100%; height: 200px; background: #1a1d23; color: #fff; border: 1px solid #333; border-radius: 8px; padding: 12px; font-size: 14px; font-family: inherit; resize: vertical; }
-  .modal-close { margin-top: 16px; padding: 8px 16px; border-radius: 6px; border: none; background: #5b8def; color: #fff; cursor: pointer; float: right; }
+  .modal-content { background: #2a2d33; border-radius: 12px; padding: 24px; width: 520px; max-height: 85vh; overflow-y: auto; }
+  .modal-content h2 { font-size: 17px; margin-bottom: 18px; }
+  .form-group { margin-bottom: 14px; }
+  .form-group label { display: block; font-size: 12px; color: #888; margin-bottom: 5px; }
+  .form-group input, .form-group textarea { width: 100%; background: #1a1d23; color: #fff; border: 1px solid #333; border-radius: 8px; padding: 9px 12px; font-size: 14px; font-family: inherit; }
+  .form-group input:focus, .form-group textarea:focus { outline: none; border-color: #5b8def; }
+  .form-group textarea { resize: vertical; }
+  .form-row { display: flex; gap: 10px; }
+  .form-row .form-group { flex: 1; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+  .btn { padding: 8px 18px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; }
+  .btn-primary { background: #5b8def; color: #fff; }
+  .btn-primary:hover { background: #4a7de0; }
+  .btn-secondary { background: #444; color: #ccc; }
+  .btn-secondary:hover { background: #555; }
+  .btn-danger { background: #c0392b; color: #fff; }
+  .btn-danger:hover { background: #d35400; }
 
-  .back-link { position: fixed; top: 12px; left: 240px; font-size: 12px; color: #666; text-decoration: none; }
-  .back-link:hover { color: #aaa; }
+  .empty-state { color: #666; font-size: 13px; text-align: center; padding: 16px 0; }
 </style>
 </head>
 <body>
 
-<a class="back-link" href="./">← 返回正式版</a>
-
+<!-- 左侧：群列表 -->
 <div class="sidebar">
   <div class="sidebar-header">
     <span>群聊</span>
     <span class="proto-tag">原型</span>
   </div>
   <div class="group-list" id="group-list"></div>
-  <div class="new-group-btn" onclick="alert('原型模式：新建群功能在正式版中实现')">+ 新建群</div>
+  <div class="new-group-btn" onclick="openGroupModal()">+ 新建群</div>
 </div>
 
+<!-- 中间：聊天 -->
 <div class="chat-area">
   <div class="chat-header">
-    <span id="current-group-name">选择一个群</span>
-    <span class="status-group">
-      <span>WS: <span class="status-ok">✓ 已连接</span></span>
-      <span>opencode: <span class="status-ok">✓ 已安装</span></span>
-    </span>
+    <div>
+      <div class="chat-title" id="current-group-name">未选择</div>
+      <div class="chat-sub" id="current-group-dir"></div>
+    </div>
+    <div class="status-group">
+      <span>WS: <span class="status-ok">✓</span></span>
+      <span>opencode: <span class="status-ok">✓</span></span>
+    </div>
   </div>
-  <div class="announcement-bar" id="announcement-bar" onclick="openAnnouncement()">
-    📋 群公告：点击查看协作规则...
+  <div class="announcement-bar" onclick="openAnnouncementModal()">
+    <span>📋</span>
+    <span class="announcement-text" id="announcement-text">点击编辑工作流/群公告</span>
   </div>
   <div class="messages" id="messages"></div>
   <div class="typing-indicator" id="typing-indicator" style="display:none;"></div>
   <div class="input-area">
-    <textarea id="input" placeholder="输入消息... @角色名 指定回复 / 不提则相关角色自动回应" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"></textarea>
+    <textarea id="input" placeholder="输入消息... @角色名 指定回复，不提则相关角色自动回应" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"></textarea>
     <button onclick="sendMessage()">发送</button>
   </div>
 </div>
 
+<!-- 右侧：成员 + 角色库 -->
 <div class="rightbar">
-  <h3>群成员</h3>
-  <div id="member-list">（未选择群）</div>
-  <h3 style="margin-top:20px;">角色库</h3>
-  <div id="roles-list"></div>
+  <div class="rightbar-section">
+    <h3>群成员</h3>
+    <div id="member-list"></div>
+  </div>
+  <div class="rightbar-section">
+    <h3>角色库 <button class="add-btn" onclick="openRoleModal()" title="新建角色">+</button></h3>
+    <div id="roles-list"></div>
+  </div>
 </div>
 
+<!-- 群弹窗（新建/编辑） -->
+<div class="modal" id="group-modal">
+  <div class="modal-content">
+    <h2 id="group-modal-title">新建群</h2>
+    <div class="form-group">
+      <label>群名称</label>
+      <input id="group-name-input" placeholder="例如：电商小程序">
+    </div>
+    <div class="form-group">
+      <label>项目目录（角色干活的文件夹，绝对路径）</label>
+      <input id="group-dir-input" placeholder="D:\projects\my-project">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('group-modal')">取消</button>
+      <button class="btn btn-primary" onclick="saveGroupModal()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 角色弹窗（新建/编辑） -->
+<div class="modal" id="role-modal">
+  <div class="modal-content">
+    <h2 id="role-modal-title">新建角色</h2>
+    <div class="form-row">
+      <div class="form-group">
+        <label>角色名称</label>
+        <input id="role-name-input" placeholder="例如：前端开发">
+      </div>
+      <div class="form-group" style="max-width:90px;">
+        <label>Emoji</label>
+        <input id="role-emoji-input" placeholder="🎨" maxlength="4">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>关键词（空格分隔，用于自动判断相关性）</label>
+      <input id="role-desc-input" placeholder="前端 UI 页面 React">
+    </div>
+    <div class="form-group">
+      <label>角色提示词（System Prompt）</label>
+      <textarea id="role-prompt-input" rows="7" placeholder="你是一位资深前端开发工程师..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('role-modal')">取消</button>
+      <button class="btn btn-primary" onclick="saveRoleModal()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 公告/工作流弹窗 -->
 <div class="modal" id="announcement-modal">
   <div class="modal-content">
-    <h2>📋 群公告（协作规则）</h2>
-    <textarea id="announcement-text"></textarea>
-    <button class="modal-close" onclick="closeAnnouncement()">关闭</button>
+    <h2>📋 群公告 / 工作流提示词</h2>
+    <div class="form-group">
+      <label>这里写的内容会作为所有角色的协作规则，每次对话都会注入</label>
+      <textarea id="announcement-input" rows="10"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('announcement-modal')">取消</button>
+      <button class="btn btn-primary" onclick="saveAnnouncementModal()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 确认弹窗 -->
+<div class="modal" id="confirm-modal">
+  <div class="modal-content" style="width:380px;">
+    <h2 id="confirm-title">确认</h2>
+    <p id="confirm-message" style="font-size:14px;color:#aaa;"></p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('confirm-modal')">取消</button>
+      <button class="btn btn-danger" id="confirm-ok-btn">确定</button>
+    </div>
   </div>
 </div>
 
 <script>
-const groups = [
+// ── 数据存储（localStorage）──
+const STORAGE_KEY = 'agc_prototype_data';
+
+const defaultRoles = [
+  { id: 'product-manager', name: '产品经理', emoji: '🧭', description: '需求 PRD 产品 规划', systemPrompt: '你是一位资深产品经理，负责需求梳理、PRD 编写、优先级排序。回答务实，直接给方案。' },
+  { id: 'software-architect', name: '软件架构师', emoji: '🏗️', description: '架构 技术 选型 系统设计', systemPrompt: '你是一位资深软件架构师，负责技术选型、系统架构设计、接口规范。回答要有全局观，给出具体方案。' },
+  { id: 'frontend-developer', name: '前端开发', emoji: '🎨', description: '前端 UI 页面 React 组件', systemPrompt: '你是一位资深前端开发工程师，精通 HTML/CSS/JS/TS，熟悉 React/Vue。直接给代码和实现思路。' },
+  { id: 'backend-developer', name: '后端开发', emoji: '⚙️', description: '后端 API 数据库 接口 服务', systemPrompt: '你是一位资深后端开发工程师，精通 Node.js、数据库设计、RESTful API。直接给接口和代码。' },
+  { id: 'qa-engineer', name: '测试工程师', emoji: '🧪', description: '测试 用例 QA 边界 异常', systemPrompt: '你是一位资深测试工程师，擅长边界用例、异常路径分析。专门挑毛病，列出可能的失败场景。' },
+  { id: 'code-reviewer', name: '代码审查员', emoji: '🔍', description: '代码 review 质量 安全 规范', systemPrompt: '你是一位资深代码审查员，关注代码质量、安全性、可维护性。直接指出问题并给改进建议。' },
+];
+
+const defaultGroups = [
   {
-    name: '电商小程序',
-    projectDir: './projects/ecom-miniprogram',
+    id: 'g1', name: '电商小程序', projectDir: 'D:\\projects\\ecom-miniprogram',
     members: ['product-manager', 'software-architect', 'frontend-developer', 'backend-developer'],
-    announcement: '协作规则：\n1. 产品经理先出 PRD 大纲\n2. 架构师定技术方案\n3. 前后端并行开发\n4. 测试最后验收',
-  },
-  {
-    name: '内部工具平台',
-    projectDir: './projects/internal-tool',
-    members: ['product-manager', 'backend-developer', 'qa-engineer'],
-    announcement: '目标：3 周内出可用版本，先核心功能，再补体验',
+    announcement: '协作规则：\n1. 产品经理先出 PRD\n2. 架构师定技术方案\n3. 前后端并行开发\n4. 测试最后验收',
+    messages: [
+      { id: 'm1', from: '我', fromType: 'user', text: '大家好，我们要做一个电商小程序，先从哪开始？', at: new Date(Date.now() - 600000).toISOString() },
+      { id: 'm2', from: '产品经理', fromType: 'agent', text: '大家好！我先出需求大纲：\n\n1. 用户端：浏览商品、下单、看订单\n2. 管理端：商品管理、订单管理\n3. 核心流程：登录 → 浏览 → 下单 → 支付\n\n架构师可以先定技术栈。', at: new Date(Date.now() - 540000).toISOString() },
+      { id: 'm3', from: '软件架构师', fromType: 'agent', text: '技术方案建议用 Taro + Node.js，一套代码多端运行，前后端分离。', at: new Date(Date.now() - 480000).toISOString() },
+    ],
   },
 ];
 
-const roles = [
-  { id: 'product-manager', name: '产品经理', emoji: '🧭', description: '需求 PRD 产品规划 用户故事' },
-  { id: 'software-architect', name: '软件架构师', emoji: '🏗️', description: '技术架构 系统设计 选型 微服务' },
-  { id: 'frontend-developer', name: '前端开发', emoji: '🎨', description: '前端 UI 界面 页面 React 组件' },
-  { id: 'backend-developer', name: '后端开发', emoji: '⚙️', description: '后端 API 数据库 接口 服务' },
-  { id: 'qa-engineer', name: '测试工程师', emoji: '🧪', description: '测试 用例 QA 边界 异常' },
-  { id: 'code-reviewer', name: '代码审查员', emoji: '🔍', description: '代码 review 质量 规范 安全' },
-];
-
-const mockReplies = {
-  'product-manager': '收到。我来梳理一下需求：\n\n1. **核心功能**：用户登录、商品列表、下单流程\n2. **优先级**：P0 登录 + 商品列表，P1 下单\n3. **用户故事**：作为用户，我希望能快速浏览商品并下单\n\n接下来我会输出详细 PRD，架构师可以先定技术方案。',
-  'software-architect': '技术方案建议：\n\n- **前端**：Taro 3 + React（一套代码多端）\n- **后端**：Node.js + Express + PostgreSQL\n- **部署**：Docker Compose 一键启动\n- **接口风格**：RESTful，JSON\n\n这样前后端分离，开发效率最高。',
-  'frontend-developer': '前端方案：\n\n页面结构：\n- 登录页：手机号 + 验证码\n- 商品列表：瀑布流布局\n- 商品详情：图片轮播 + 规格选择\n\n用 Taro 开发，组件化，后续可复用。',
-  'backend-developer': '后端接口设计：\n\n```\nPOST /api/auth/send-code    发送验证码\nPOST /api/auth/login        登录\nGET  /api/products          商品列表\nGET  /api/products/:id      商品详情\nPOST /api/orders            创建订单\n```\n\n数据库：users、products、orders 三张表。',
-  'qa-engineer': '我补充几个测试要点：\n\n1. **边界**：验证码 5 分钟过期、下单库存为 0 时提示\n2. **异常**：网络超时、重复提交订单\n3. **权限**：未登录访问个人中心要跳转登录\n4. **兼容**：iOS / Android 样式差异\n\n这些场景别忘了测。',
-  'code-reviewer': '代码 review 要点：\n\n- 登录接口要加限流，防止短信轰炸\n- 商品列表要加分页，不能一次全量返回\n- 订单创建要加事务，扣库存 + 生成订单原子操作\n- 所有接口都要加参数校验\n\n性能和安全是重点。',
-};
-
-let currentGroup = null;
+let data = loadData();
+let currentGroupId = data.groups[0]?.id || null;
 let agentStates = {};
+let editingGroupId = null;
+let editingRoleId = null;
 
-function init() {
+function loadData() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return { groups: defaultGroups, roles: defaultRoles };
+}
+function saveData() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+// ── 渲染 ──
+function renderAll() {
   renderGroupList();
+  renderMembers();
   renderRolesList();
-  if (groups.length) selectGroup(groups[0].name);
+  renderMessages();
+  renderAnnouncement();
 }
 
 function renderGroupList() {
   const el = document.getElementById('group-list');
-  el.innerHTML = groups.map(g =>
-    '<div class="group-item' + (g.name === currentGroup?.name ? ' active' : '') + '" onclick="selectGroup(\'' + g.name + '\')">' +
-      g.name +
-      '<div class="group-meta">' + g.members.length + ' 个成员</div>' +
+  if (!data.groups.length) {
+    el.innerHTML = '<div class="empty-state">暂无群聊<br>点下方新建</div>';
+    return;
+  }
+  el.innerHTML = data.groups.map(g =>
+    '<div class="group-item' + (g.id === currentGroupId ? ' active' : '') + '" onclick="selectGroup(\'' + g.id + '\')">' +
+      '<div class="group-info">' +
+        '<div class="group-name">' + g.name + '</div>' +
+        '<div class="group-meta">' + g.members.length + ' 成员</div>' +
+      '</div>' +
+      '<div class="group-actions">' +
+        '<button class="icon-btn" onclick="event.stopPropagation();openGroupModal(\'' + g.id + '\')" title="编辑">✎</button>' +
+        '<button class="icon-btn danger" onclick="event.stopPropagation();confirmDeleteGroup(\'' + g.id + '\')" title="删除">✕</button>' +
+      '</div>' +
     '</div>'
   ).join('');
-}
-
-function renderRolesList() {
-  const el = document.getElementById('roles-list');
-  el.innerHTML = roles.map(r =>
-    '<div class="member-item"><span>' + r.emoji + ' ' + r.name + '</span>' +
-      '<button onclick="alert(\'原型模式：添加成员功能在正式版中实现\')" style="font-size:11px;cursor:pointer;">+</button>' +
-    '</div>'
-  ).join('');
-}
-
-function selectGroup(name) {
-  currentGroup = groups.find(g => g.name === name);
-  agentStates = {};
-  document.getElementById('current-group-name').textContent = name;
-  document.getElementById('announcement-bar').textContent = '📋 群公告：' + (currentGroup.announcement || '').slice(0, 50) + '...';
-  document.getElementById('announcement-text').value = currentGroup.announcement || '';
-  renderGroupList();
-  renderMembers();
-  renderMockMessages();
 }
 
 function renderMembers() {
   const el = document.getElementById('member-list');
-  const memberNames = currentGroup.members.map(id => roles.find(r => r.id === id)).filter(Boolean);
-  el.innerHTML = memberNames.map(m => {
-    const st = agentStates[m.id];
-    let statusHtml = '';
+  const group = getCurrentGroup();
+  if (!group) { el.innerHTML = '<div class="empty-state">未选择群</div>'; return; }
+  if (!group.members.length) { el.innerHTML = '<div class="empty-state">暂无成员<br>从下方角色库添加</div>'; return; }
+
+  el.innerHTML = group.members.map(id => {
+    const role = data.roles.find(r => r.id === id);
+    if (!role) return '';
+    const st = agentStates[id];
+    let statusLabel = '';
     if (st && st.status !== 'idle' && st.status !== 'done') {
-      const label = st.status === 'thinking' ? '思考中...' : st.status === 'replying' ? '回复中...' : '出错';
-      statusHtml = '<span class="member-status ' + st.status + '">' + label + '</span>';
+      const label = st.status === 'thinking' ? '思考中' : st.status === 'replying' ? '回复中' : '出错';
+      statusLabel = '<span class="member-status ' + st.status + '">' + label + '</span>';
     }
-    return '<div class="member-item"><span>' + m.emoji + ' ' + m.name + '</span>' + statusHtml + '</div>';
+    return '<div class="member-item">' +
+      '<div class="member-left"><span>' + role.emoji + '</span><span class="member-name">' + role.name + '</span></div>' +
+      statusLabel +
+      '<button class="remove-btn" onclick="removeMember(\'' + id + '\')" title="移除">✕</button>' +
+    '</div>';
   }).join('');
 }
 
-function renderMockMessages() {
+function renderRolesList() {
+  const el = document.getElementById('roles-list');
+  if (!data.roles.length) { el.innerHTML = '<div class="empty-state">暂无角色</div>'; return; }
+  const group = getCurrentGroup();
+
+  el.innerHTML = data.roles.map(r => {
+    const inGroup = group?.members.includes(r.id);
+    return '<div class="member-item">' +
+      '<div class="member-left"><span>' + r.emoji + '</span><span class="member-name">' + r.name + '</span></div>' +
+      '<button class="icon-btn" onclick="openRoleModal(\'' + r.id + '\')" title="编辑">✎</button>' +
+      '<button class="icon-btn danger" onclick="confirmDeleteRole(\'' + r.id + '\')" title="删除角色">✕</button>' +
+      (inGroup ? '' : '<button class="icon-btn" onclick="addMember(\'' + r.id + '\')" title="加入群">+</button>') +
+    '</div>';
+  }).join('');
+}
+
+function renderMessages() {
   const el = document.getElementById('messages');
-  const mockMsgs = [
-    { from: '我', fromType: 'user', text: '大家好，我们要做一个电商小程序，先从哪开始？', at: new Date(Date.now() - 600000).toISOString() },
-    { from: '产品经理', fromType: 'agent', text: '大家好！我先出个需求大纲：\n\n1. 用户端：浏览商品、下单、看订单\n2. 管理端：商品管理、订单管理\n3. 核心流程：登录 → 浏览 → 下单 → 支付\n\n架构师可以先定技术栈，前端后端并行开发。', at: new Date(Date.now() - 540000).toISOString() },
-    { from: '软件架构师', fromType: 'agent', text: '技术方案建议用 Taro + Node.js，一套代码多端运行，前后端分离。具体接口设计后端同学可以补充。', at: new Date(Date.now() - 480000).toISOString() },
-    { from: '前端开发', fromType: 'agent', text: '前端这边没问题，Taro 我很熟。页面结构大概 5 个：登录、首页、商品列表、商品详情、订单。预计 5 天能出原型。', at: new Date(Date.now() - 420000).toISOString() },
-    { from: '后端开发', fromType: 'agent', text: '后端接口我来设计，先出 RESTful API 文档，然后搭数据库。用 Express + PostgreSQL，3 天能出核心接口。', at: new Date(Date.now() - 360000).toISOString() },
-  ];
-  el.innerHTML = mockMsgs.map(m => msgHtml(m)).join('');
+  const group = getCurrentGroup();
+  if (!group) { el.innerHTML = ''; return; }
+  el.innerHTML = group.messages.map(m => msgHtml(m)).join('');
   el.scrollTop = el.scrollHeight;
+}
+
+function renderAnnouncement() {
+  const group = getCurrentGroup();
+  document.getElementById('current-group-name').textContent = group?.name || '未选择';
+  document.getElementById('current-group-dir').textContent = group?.projectDir || '';
+  document.getElementById('announcement-text').textContent = group?.announcement || '点击编辑工作流/群公告';
 }
 
 function msgHtml(m) {
@@ -219,10 +362,12 @@ function msgHtml(m) {
 }
 
 function updateTypingIndicator() {
+  const group = getCurrentGroup();
+  if (!group) return;
   const thinking = Object.entries(agentStates)
-    .filter(([_, s]) => s.status === 'thinking' || s.status === 'replying')
+    .filter(([id, s]) => group.members.includes(id) && (s.status === 'thinking' || s.status === 'replying'))
     .map(([id, s]) => {
-      const role = roles.find(r => r.id === id);
+      const role = data.roles.find(r => r.id === id);
       return (role?.name || id) + (s.status === 'thinking' ? ' 思考中' : ' 回复中');
     });
   const el = document.getElementById('typing-indicator');
@@ -234,79 +379,260 @@ function updateTypingIndicator() {
   }
 }
 
+// ── 群操作 ──
+function getCurrentGroup() {
+  return data.groups.find(g => g.id === currentGroupId);
+}
+
+function selectGroup(id) {
+  currentGroupId = id;
+  agentStates = {};
+  renderAll();
+}
+
+function openGroupModal(id) {
+  editingGroupId = id || null;
+  const title = document.getElementById('group-modal-title');
+  const nameInput = document.getElementById('group-name-input');
+  const dirInput = document.getElementById('group-dir-input');
+
+  if (id) {
+    const g = data.groups.find(g => g.id === id);
+    title.textContent = '编辑群';
+    nameInput.value = g.name;
+    dirInput.value = g.projectDir;
+  } else {
+    title.textContent = '新建群';
+    nameInput.value = '';
+    dirInput.value = '';
+  }
+  openModal('group-modal');
+}
+
+function saveGroupModal() {
+  const name = document.getElementById('group-name-input').value.trim();
+  const dir = document.getElementById('group-dir-input').value.trim();
+  if (!name || !dir) { alert('名称和目录都要填'); return; }
+
+  if (editingGroupId) {
+    const g = data.groups.find(g => g.id === editingGroupId);
+    g.name = name;
+    g.projectDir = dir;
+  } else {
+    const newId = 'g' + Date.now();
+    data.groups.push({ id: newId, name, projectDir: dir, members: [], announcement: '', messages: [] });
+    currentGroupId = newId;
+  }
+  saveData();
+  closeModal('group-modal');
+  renderAll();
+}
+
+function confirmDeleteGroup(id) {
+  const g = data.groups.find(g => g.id === id);
+  showConfirm('删除群', `确定删除「${g.name}」吗？所有聊天记录都会删除，不可恢复。`, () => {
+    data.groups = data.groups.filter(g => g.id !== id);
+    if (currentGroupId === id) currentGroupId = data.groups[0]?.id || null;
+    saveData();
+    renderAll();
+  });
+}
+
+// ── 成员操作 ──
+function addMember(roleId) {
+  const group = getCurrentGroup();
+  if (!group || group.members.includes(roleId)) return;
+  group.members.push(roleId);
+  const role = data.roles.find(r => r.id === roleId);
+  group.messages.push({
+    id: 'sys' + Date.now(), from: '系统', fromType: 'system',
+    text: `${role?.name || roleId} 加入了群聊`, at: new Date().toISOString()
+  });
+  saveData();
+  renderAll();
+}
+
+function removeMember(roleId) {
+  const group = getCurrentGroup();
+  if (!group) return;
+  group.members = group.members.filter(m => m !== roleId);
+  const role = data.roles.find(r => r.id === roleId);
+  group.messages.push({
+    id: 'sys' + Date.now(), from: '系统', fromType: 'system',
+    text: `${role?.name || roleId} 被移出群聊`, at: new Date().toISOString()
+  });
+  saveData();
+  renderAll();
+}
+
+// ── 角色操作 ──
+function openRoleModal(id) {
+  editingRoleId = id || null;
+  const title = document.getElementById('role-modal-title');
+
+  if (id) {
+    const r = data.roles.find(r => r.id === id);
+    title.textContent = '编辑角色';
+    document.getElementById('role-name-input').value = r.name;
+    document.getElementById('role-emoji-input').value = r.emoji;
+    document.getElementById('role-desc-input').value = r.description;
+    document.getElementById('role-prompt-input').value = r.systemPrompt;
+  } else {
+    title.textContent = '新建角色';
+    document.getElementById('role-name-input').value = '';
+    document.getElementById('role-emoji-input').value = '🤖';
+    document.getElementById('role-desc-input').value = '';
+    document.getElementById('role-prompt-input').value = '';
+  }
+  openModal('role-modal');
+}
+
+function saveRoleModal() {
+  const name = document.getElementById('role-name-input').value.trim();
+  const emoji = document.getElementById('role-emoji-input').value.trim() || '🤖';
+  const desc = document.getElementById('role-desc-input').value.trim();
+  const prompt = document.getElementById('role-prompt-input').value.trim();
+  if (!name) { alert('角色名称要填'); return; }
+
+  if (editingRoleId) {
+    const r = data.roles.find(r => r.id === editingRoleId);
+    r.name = name; r.emoji = emoji; r.description = desc; r.systemPrompt = prompt;
+  } else {
+    const newId = 'r' + Date.now();
+    data.roles.push({ id: newId, name, emoji, description: desc, systemPrompt: prompt });
+  }
+  saveData();
+  closeModal('role-modal');
+  renderAll();
+}
+
+function confirmDeleteRole(id) {
+  const r = data.roles.find(r => r.id === id);
+  showConfirm('删除角色', `确定删除角色「${r.name}」吗？所有群里的这个角色都会被移除。`, () => {
+    data.roles = data.roles.filter(r => r.id !== id);
+    for (const g of data.groups) g.members = g.members.filter(m => m !== id);
+    saveData();
+    renderAll();
+  });
+}
+
+// ── 公告/工作流 ──
+function openAnnouncementModal() {
+  const group = getCurrentGroup();
+  if (!group) return;
+  document.getElementById('announcement-input').value = group.announcement || '';
+  openModal('announcement-modal');
+}
+
+function saveAnnouncementModal() {
+  const group = getCurrentGroup();
+  if (!group) return;
+  group.announcement = document.getElementById('announcement-input').value;
+  saveData();
+  closeModal('announcement-modal');
+  renderAll();
+}
+
+// ── 发消息 + 模拟角色回复 ──
 function sendMessage() {
   const input = document.getElementById('input');
   const text = input.value.trim();
-  if (!text || !currentGroup) return;
+  const group = getCurrentGroup();
+  if (!text || !group) return;
   input.value = '';
 
-  const el = document.getElementById('messages');
-  el.insertAdjacentHTML('beforeend', msgHtml({
-    from: '我', fromType: 'user', text, at: new Date().toISOString()
-  }));
-  el.scrollTop = el.scrollHeight;
+  group.messages.push({
+    id: 'm' + Date.now(), from: '我', fromType: 'user', text, at: new Date().toISOString()
+  });
+  saveData();
+  renderMessages();
 
+  // 解析 @角色
   const mentioned = [];
   const match = text.match(/@([\u4e00-\u9fa5a-zA-Z-]+)/g);
   if (match) {
     for (const m of match) {
       const name = m.slice(1);
-      const role = roles.find(r => r.name.includes(name) || r.id === name);
-      if (role && currentGroup.members.includes(role.id)) mentioned.push(role.id);
+      const role = data.roles.find(r => r.name === name || r.id === name);
+      if (role && group.members.includes(role.id)) mentioned.push(role.id);
     }
   }
 
   let toReply = [];
   if (mentioned.length) {
-    toReply = mentioned.map(id => roles.find(r => r.id === id)).filter(Boolean);
+    toReply = mentioned;
   } else {
-    toReply = currentGroup.members.slice(0, 2).map(id => roles.find(r => r.id === id)).filter(Boolean);
+    // 关键词匹配
+    const lower = text.toLowerCase();
+    toReply = group.members.filter(id => {
+      const role = data.roles.find(r => r.id === id);
+      if (!role) return false;
+      const kws = role.description.split(/\s+/).filter(w => w.length >= 1);
+      return kws.some(kw => lower.includes(kw.toLowerCase()));
+    });
   }
 
   if (!toReply.length) return;
 
-  let delay = 800;
-  for (const role of toReply) {
+  let delay = 600;
+  for (const roleId of toReply) {
+    const role = data.roles.find(r => r.id === roleId);
+
     setTimeout(() => {
-      agentStates[role.id] = { status: 'thinking' };
+      agentStates[roleId] = { status: 'thinking' };
       renderMembers();
       updateTypingIndicator();
     }, delay);
 
     setTimeout(() => {
-      agentStates[role.id] = { status: 'replying' };
+      agentStates[roleId] = { status: 'replying' };
       renderMembers();
       updateTypingIndicator();
 
-      const replyText = mockReplies[role.id] || `${role.name} 收到，我来处理一下...`;
-      el.insertAdjacentHTML('beforeend', msgHtml({
-        from: role.name, fromType: 'agent', text: replyText, at: new Date().toISOString()
-      }));
-      el.scrollTop = el.scrollHeight;
+      const replyText = generateMockReply(role, text);
+      group.messages.push({
+        id: 'm' + Date.now() + Math.random(), from: role.name, fromType: 'agent',
+        text: replyText, at: new Date().toISOString()
+      });
+      saveData();
+      renderMessages();
 
       setTimeout(() => {
-        agentStates[role.id] = { status: 'done' };
+        agentStates[roleId] = { status: 'done' };
         renderMembers();
         updateTypingIndicator();
-      }, 500);
-    }, delay + 2000 + Math.random() * 1500);
+      }, 400);
+    }, delay + 1800 + Math.random() * 1200);
 
-    delay += 3000;
+    delay += 2800;
   }
 }
 
-function openAnnouncement() {
-  document.getElementById('announcement-modal').classList.add('show');
+function generateMockReply(role, userText) {
+  return `【${role.name}】收到你的消息：「${userText.slice(0, 30)}」\n\n基于我的角色定位，我会这样处理：\n1. 先分析需求和约束\n2. 给出具体方案和步骤\n3. 同步给相关同事\n\n（原型模拟回复，正式版会调用 opencode 生成真实内容）`;
 }
-function closeAnnouncement() {
-  document.getElementById('announcement-modal').classList.remove('show');
+
+// ── 弹窗工具 ──
+function openModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+let confirmCallback = null;
+function showConfirm(title, message, cb) {
+  document.getElementById('confirm-title').textContent = title;
+  document.getElementById('confirm-message').textContent = message;
+  confirmCallback = cb;
+  document.getElementById('confirm-ok-btn').onclick = () => {
+    closeModal('confirm-modal');
+    confirmCallback?.();
+  };
+  openModal('confirm-modal');
 }
 
 function escapeHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-init();
+renderAll();
 </script>
 </body>
 </html>
