@@ -14,13 +14,13 @@ import {
 } from './store.js';
 import type { Message, AgentDefinition } from './types.js';
 import { checkOpencode } from './opencode.js';
+import { triggerAgents, setStatusCallback, getGroupStates } from './agent-runner.js';
 
 const PORT = parseInt(process.env.AGC_PORT || '8787', 10);
 
 const app = express();
 app.use(express.json());
 
-// CORS：允许 GitHub Pages 等外部前端连本地后端
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
@@ -34,7 +34,6 @@ app.use(express.static(join(process.cwd(), 'public')));
 const server = createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
-// WebSocket 连接池：按群 id 分组
 const clients = new Map<string, Set<WebSocket>>();
 
 function broadcast(group: string, type: string, data: unknown) {
@@ -46,14 +45,10 @@ function broadcast(group: string, type: string, data: unknown) {
   }
 }
 
-function broadcastAll(type: string, data: unknown) {
-  const payload = JSON.stringify({ type, group: '*', data });
-  for (const set of clients.values()) {
-    for (const ws of set) {
-      if (ws.readyState === WebSocket.OPEN) ws.send(payload);
-    }
-  }
-}
+// 角色状态变化 → 广播
+setStatusCallback((groupId, states) => {
+  broadcast(groupId, 'agent_status', states);
+});
 
 wss.on('connection', (ws, req) => {
   const url = new URL(req.url || '', `http://localhost:${PORT}`);
@@ -61,6 +56,13 @@ wss.on('connection', (ws, req) => {
   if (group) {
     if (!clients.has(group)) clients.set(group, new Set());
     clients.get(group)!.add(ws);
+
+    // 连上后立刻推当前状态
+    ws.send(JSON.stringify({
+      type: 'agent_status',
+      group,
+      data: getGroupStates(group),
+    }));
   }
 
   ws.on('close', () => {
@@ -145,23 +147,20 @@ app.post('/api/groups/:id/messages', (req, res) => {
   broadcast(req.params.id, 'message', msg);
   res.json(msg);
 
-  // Phase 4 会在这里接入真实调度
-  // 现在先动态导入，避免编译错误
-  import('./agent-runner.js').then(({ triggerAgents }) => {
-    triggerAgents(req.params.id, msg, (agentId, replyText) => {
-      const agent = getAgent(agentId);
-      const replyMsg: Message = {
-        id: randomUUID(),
-        from: agent?.name || agentId,
-        fromType: 'agent',
-        text: replyText,
-        at: new Date().toISOString(),
-      };
-      appendMessage(req.params.id, replyMsg);
-      broadcast(req.params.id, 'message', replyMsg);
-    });
+  // 异步触发角色回复
+  triggerAgents(req.params.id, msg, (agentId, replyText) => {
+    const agent = getAgent(agentId);
+    const replyMsg: Message = {
+      id: randomUUID(),
+      from: agent?.name || agentId,
+      fromType: 'agent',
+      text: replyText,
+      at: new Date().toISOString(),
+    };
+    appendMessage(req.params.id, replyMsg);
+    broadcast(req.params.id, 'message', replyMsg);
   }).catch(err => {
-    console.error('调度器加载失败:', err.message);
+    console.error('调度失败:', err.message);
   });
 });
 
