@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Group Chat - 原型</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: #1a1d23; color: #e0e0e0; height: 100vh; display: flex; }
+
+  .sidebar { width: 220px; background: #22252b; border-right: 1px solid #333; display: flex; flex-direction: column; }
+  .sidebar-header { padding: 16px; font-weight: 600; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
+  .sidebar-header .proto-tag { font-size: 10px; background: #5b8def; padding: 2px 6px; border-radius: 3px; font-weight: normal; }
+  .group-list { flex: 1; overflow-y: auto; padding: 8px; }
+  .group-item { padding: 10px 12px; border-radius: 6px; cursor: pointer; margin-bottom: 2px; font-size: 14px; }
+  .group-item:hover { background: #2a2d33; }
+  .group-item.active { background: #3a4050; }
+  .group-item .group-meta { font-size: 11px; color: #888; margin-top: 2px; }
+  .new-group-btn { margin: 8px; padding: 8px; border: 1px dashed #555; border-radius: 6px; text-align: center; cursor: pointer; font-size: 13px; color: #aaa; }
+  .new-group-btn:hover { border-color: #888; color: #fff; }
+
+  .chat-area { flex: 1; display: flex; flex-direction: column; }
+  .chat-header { padding: 14px 20px; border-bottom: 1px solid #333; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+  .chat-header .status-group { font-size: 12px; color: #888; font-weight: normal; display: flex; gap: 12px; }
+  .chat-header .status-ok { color: #4caf50; }
+  .announcement-bar { padding: 8px 20px; background: #2a2d33; border-bottom: 1px solid #333; font-size: 12px; color: #888; cursor: pointer; }
+  .announcement-bar:hover { color: #ccc; }
+
+  .messages { flex: 1; overflow-y: auto; padding: 20px; }
+  .msg { margin-bottom: 16px; max-width: 75%; animation: fadeIn 0.2s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .msg-user { margin-left: auto; }
+  .msg-meta { font-size: 12px; color: #888; margin-bottom: 4px; }
+  .msg-bubble { padding: 10px 14px; border-radius: 10px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+  .msg-user .msg-bubble { background: #5b8def; color: #fff; border-bottom-right-radius: 2px; }
+  .msg-agent .msg-bubble { background: #2a2d33; border-bottom-left-radius: 2px; }
+
+  .typing-indicator { padding: 8px 20px; font-size: 13px; color: #888; font-style: italic; }
+  .typing-dots::after { content: ''; animation: dots 1.5s steps(4, end) infinite; }
+  @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+
+  .input-area { padding: 16px 20px; border-top: 1px solid #333; display: flex; gap: 10px; }
+  .input-area textarea { flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid #333; background: #2a2d33; color: #fff; font-size: 14px; resize: none; height: 44px; font-family: inherit; }
+  .input-area button { padding: 0 20px; border-radius: 8px; border: none; background: #5b8def; color: #fff; cursor: pointer; font-size: 14px; }
+  .input-area button:hover { background: #4a7de0; }
+
+  .rightbar { width: 240px; background: #22252b; border-left: 1px solid #333; padding: 16px; overflow-y: auto; }
+  .rightbar h3 { font-size: 13px; color: #888; margin-bottom: 10px; text-transform: uppercase; }
+  .member-item { padding: 6px 0; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+  .member-status { font-size: 11px; color: #888; }
+  .member-status.thinking { color: #ff9800; }
+  .member-status.replying { color: #4caf50; }
+
+  .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 100; align-items: center; justify-content: center; }
+  .modal.show { display: flex; }
+  .modal-content { background: #2a2d33; border-radius: 12px; padding: 24px; width: 500px; max-height: 70vh; overflow-y: auto; }
+  .modal-content h2 { font-size: 18px; margin-bottom: 16px; }
+  .modal-content textarea { width: 100%; height: 200px; background: #1a1d23; color: #fff; border: 1px solid #333; border-radius: 8px; padding: 12px; font-size: 14px; font-family: inherit; resize: vertical; }
+  .modal-close { margin-top: 16px; padding: 8px 16px; border-radius: 6px; border: none; background: #5b8def; color: #fff; cursor: pointer; float: right; }
+
+  .back-link { position: fixed; top: 12px; left: 240px; font-size: 12px; color: #666; text-decoration: none; }
+  .back-link:hover { color: #aaa; }
+</style>
+</head>
+<body>
+
+<a class="back-link" href="./">← 返回正式版</a>
+
+<div class="sidebar">
+  <div class="sidebar-header">
+    <span>群聊</span>
+    <span class="proto-tag">原型</span>
+  </div>
+  <div class="group-list" id="group-list"></div>
+  <div class="new-group-btn" onclick="alert('原型模式：新建群功能在正式版中实现')">+ 新建群</div>
+</div>
+
+<div class="chat-area">
+  <div class="chat-header">
+    <span id="current-group-name">选择一个群</span>
+    <span class="status-group">
+      <span>WS: <span class="status-ok">✓ 已连接</span></span>
+      <span>opencode: <span class="status-ok">✓ 已安装</span></span>
+    </span>
+  </div>
+  <div class="announcement-bar" id="announcement-bar" onclick="openAnnouncement()">
+    📋 群公告：点击查看协作规则...
+  </div>
+  <div class="messages" id="messages"></div>
+  <div class="typing-indicator" id="typing-indicator" style="display:none;"></div>
+  <div class="input-area">
+    <textarea id="input" placeholder="输入消息... @角色名 指定回复 / 不提则相关角色自动回应" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"></textarea>
+    <button onclick="sendMessage()">发送</button>
+  </div>
+</div>
+
+<div class="rightbar">
+  <h3>群成员</h3>
+  <div id="member-list">（未选择群）</div>
+  <h3 style="margin-top:20px;">角色库</h3>
+  <div id="roles-list"></div>
+</div>
+
+<div class="modal" id="announcement-modal">
+  <div class="modal-content">
+    <h2>📋 群公告（协作规则）</h2>
+    <textarea id="announcement-text"></textarea>
+    <button class="modal-close" onclick="closeAnnouncement()">关闭</button>
+  </div>
+</div>
+
+<script>
+const groups = [
+  {
+    name: '电商小程序',
+    projectDir: './projects/ecom-miniprogram',
+    members: ['product-manager', 'software-architect', 'frontend-developer', 'backend-developer'],
+    announcement: '协作规则：\n1. 产品经理先出 PRD 大纲\n2. 架构师定技术方案\n3. 前后端并行开发\n4. 测试最后验收',
+  },
+  {
+    name: '内部工具平台',
+    projectDir: './projects/internal-tool',
+    members: ['product-manager', 'backend-developer', 'qa-engineer'],
+    announcement: '目标：3 周内出可用版本，先核心功能，再补体验',
+  },
+];
+
+const roles = [
+  { id: 'product-manager', name: '产品经理', emoji: '🧭', description: '需求 PRD 产品规划 用户故事' },
+  { id: 'software-architect', name: '软件架构师', emoji: '🏗️', description: '技术架构 系统设计 选型 微服务' },
+  { id: 'frontend-developer', name: '前端开发', emoji: '🎨', description: '前端 UI 界面 页面 React 组件' },
+  { id: 'backend-developer', name: '后端开发', emoji: '⚙️', description: '后端 API 数据库 接口 服务' },
+  { id: 'qa-engineer', name: '测试工程师', emoji: '🧪', description: '测试 用例 QA 边界 异常' },
+  { id: 'code-reviewer', name: '代码审查员', emoji: '🔍', description: '代码 review 质量 规范 安全' },
+];
+
+const mockReplies = {
+  'product-manager': '收到。我来梳理一下需求：\n\n1. **核心功能**：用户登录、商品列表、下单流程\n2. **优先级**：P0 登录 + 商品列表，P1 下单\n3. **用户故事**：作为用户，我希望能快速浏览商品并下单\n\n接下来我会输出详细 PRD，架构师可以先定技术方案。',
+  'software-architect': '技术方案建议：\n\n- **前端**：Taro 3 + React（一套代码多端）\n- **后端**：Node.js + Express + PostgreSQL\n- **部署**：Docker Compose 一键启动\n- **接口风格**：RESTful，JSON\n\n这样前后端分离，开发效率最高。',
+  'frontend-developer': '前端方案：\n\n页面结构：\n- 登录页：手机号 + 验证码\n- 商品列表：瀑布流布局\n- 商品详情：图片轮播 + 规格选择\n\n用 Taro 开发，组件化，后续可复用。',
+  'backend-developer': '后端接口设计：\n\n```\nPOST /api/auth/send-code    发送验证码\nPOST /api/auth/login        登录\nGET  /api/products          商品列表\nGET  /api/products/:id      商品详情\nPOST /api/orders            创建订单\n```\n\n数据库：users、products、orders 三张表。',
+  'qa-engineer': '我补充几个测试要点：\n\n1. **边界**：验证码 5 分钟过期、下单库存为 0 时提示\n2. **异常**：网络超时、重复提交订单\n3. **权限**：未登录访问个人中心要跳转登录\n4. **兼容**：iOS / Android 样式差异\n\n这些场景别忘了测。',
+  'code-reviewer': '代码 review 要点：\n\n- 登录接口要加限流，防止短信轰炸\n- 商品列表要加分页，不能一次全量返回\n- 订单创建要加事务，扣库存 + 生成订单原子操作\n- 所有接口都要加参数校验\n\n性能和安全是重点。',
+};
+
+let currentGroup = null;
+let agentStates = {};
+
+function init() {
+  renderGroupList();
+  renderRolesList();
+  if (groups.length) selectGroup(groups[0].name);
+}
+
+function renderGroupList() {
+  const el = document.getElementById('group-list');
+  el.innerHTML = groups.map(g =>
+    '<div class="group-item' + (g.name === currentGroup?.name ? ' active' : '') + '" onclick="selectGroup(\'' + g.name + '\')">' +
+      g.name +
+      '<div class="group-meta">' + g.members.length + ' 个成员</div>' +
+    '</div>'
+  ).join('');
+}
+
+function renderRolesList() {
+  const el = document.getElementById('roles-list');
+  el.innerHTML = roles.map(r =>
+    '<div class="member-item"><span>' + r.emoji + ' ' + r.name + '</span>' +
+      '<button onclick="alert(\'原型模式：添加成员功能在正式版中实现\')" style="font-size:11px;cursor:pointer;">+</button>' +
+    '</div>'
+  ).join('');
+}
+
+function selectGroup(name) {
+  currentGroup = groups.find(g => g.name === name);
+  agentStates = {};
+  document.getElementById('current-group-name').textContent = name;
+  document.getElementById('announcement-bar').textContent = '📋 群公告：' + (currentGroup.announcement || '').slice(0, 50) + '...';
+  document.getElementById('announcement-text').value = currentGroup.announcement || '';
+  renderGroupList();
+  renderMembers();
+  renderMockMessages();
+}
+
+function renderMembers() {
+  const el = document.getElementById('member-list');
+  const memberNames = currentGroup.members.map(id => roles.find(r => r.id === id)).filter(Boolean);
+  el.innerHTML = memberNames.map(m => {
+    const st = agentStates[m.id];
+    let statusHtml = '';
+    if (st && st.status !== 'idle' && st.status !== 'done') {
+      const label = st.status === 'thinking' ? '思考中...' : st.status === 'replying' ? '回复中...' : '出错';
+      statusHtml = '<span class="member-status ' + st.status + '">' + label + '</span>';
+    }
+    return '<div class="member-item"><span>' + m.emoji + ' ' + m.name + '</span>' + statusHtml + '</div>';
+  }).join('');
+}
+
+function renderMockMessages() {
+  const el = document.getElementById('messages');
+  const mockMsgs = [
+    { from: '我', fromType: 'user', text: '大家好，我们要做一个电商小程序，先从哪开始？', at: new Date(Date.now() - 600000).toISOString() },
+    { from: '产品经理', fromType: 'agent', text: '大家好！我先出个需求大纲：\n\n1. 用户端：浏览商品、下单、看订单\n2. 管理端：商品管理、订单管理\n3. 核心流程：登录 → 浏览 → 下单 → 支付\n\n架构师可以先定技术栈，前端后端并行开发。', at: new Date(Date.now() - 540000).toISOString() },
+    { from: '软件架构师', fromType: 'agent', text: '技术方案建议用 Taro + Node.js，一套代码多端运行，前后端分离。具体接口设计后端同学可以补充。', at: new Date(Date.now() - 480000).toISOString() },
+    { from: '前端开发', fromType: 'agent', text: '前端这边没问题，Taro 我很熟。页面结构大概 5 个：登录、首页、商品列表、商品详情、订单。预计 5 天能出原型。', at: new Date(Date.now() - 420000).toISOString() },
+    { from: '后端开发', fromType: 'agent', text: '后端接口我来设计，先出 RESTful API 文档，然后搭数据库。用 Express + PostgreSQL，3 天能出核心接口。', at: new Date(Date.now() - 360000).toISOString() },
+  ];
+  el.innerHTML = mockMsgs.map(m => msgHtml(m)).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+function msgHtml(m) {
+  const cls = m.fromType === 'user' ? 'msg msg-user' : m.fromType === 'agent' ? 'msg msg-agent' : 'msg msg-system';
+  const time = new Date(m.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  return '<div class="' + cls + '">' +
+    '<div class="msg-meta">' + m.from + ' · ' + time + '</div>' +
+    '<div class="msg-bubble">' + escapeHtml(m.text) + '</div>' +
+  '</div>';
+}
+
+function updateTypingIndicator() {
+  const thinking = Object.entries(agentStates)
+    .filter(([_, s]) => s.status === 'thinking' || s.status === 'replying')
+    .map(([id, s]) => {
+      const role = roles.find(r => r.id === id);
+      return (role?.name || id) + (s.status === 'thinking' ? ' 思考中' : ' 回复中');
+    });
+  const el = document.getElementById('typing-indicator');
+  if (thinking.length) {
+    el.style.display = 'block';
+    el.innerHTML = '<span class="typing-dots">' + thinking.join('，') + '</span>';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+function sendMessage() {
+  const input = document.getElementById('input');
+  const text = input.value.trim();
+  if (!text || !currentGroup) return;
+  input.value = '';
+
+  const el = document.getElementById('messages');
+  el.insertAdjacentHTML('beforeend', msgHtml({
+    from: '我', fromType: 'user', text, at: new Date().toISOString()
+  }));
+  el.scrollTop = el.scrollHeight;
+
+  const mentioned = [];
+  const match = text.match(/@([\u4e00-\u9fa5a-zA-Z-]+)/g);
+  if (match) {
+    for (const m of match) {
+      const name = m.slice(1);
+      const role = roles.find(r => r.name.includes(name) || r.id === name);
+      if (role && currentGroup.members.includes(role.id)) mentioned.push(role.id);
+    }
+  }
+
+  let toReply = [];
+  if (mentioned.length) {
+    toReply = mentioned.map(id => roles.find(r => r.id === id)).filter(Boolean);
+  } else {
+    toReply = currentGroup.members.slice(0, 2).map(id => roles.find(r => r.id === id)).filter(Boolean);
+  }
+
+  if (!toReply.length) return;
+
+  let delay = 800;
+  for (const role of toReply) {
+    setTimeout(() => {
+      agentStates[role.id] = { status: 'thinking' };
+      renderMembers();
+      updateTypingIndicator();
+    }, delay);
+
+    setTimeout(() => {
+      agentStates[role.id] = { status: 'replying' };
+      renderMembers();
+      updateTypingIndicator();
+
+      const replyText = mockReplies[role.id] || `${role.name} 收到，我来处理一下...`;
+      el.insertAdjacentHTML('beforeend', msgHtml({
+        from: role.name, fromType: 'agent', text: replyText, at: new Date().toISOString()
+      }));
+      el.scrollTop = el.scrollHeight;
+
+      setTimeout(() => {
+        agentStates[role.id] = { status: 'done' };
+        renderMembers();
+        updateTypingIndicator();
+      }, 500);
+    }, delay + 2000 + Math.random() * 1500);
+
+    delay += 3000;
+  }
+}
+
+function openAnnouncement() {
+  document.getElementById('announcement-modal').classList.add('show');
+}
+function closeAnnouncement() {
+  document.getElementById('announcement-modal').classList.remove('show');
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+init();
+</script>
+</body>
+</html>
