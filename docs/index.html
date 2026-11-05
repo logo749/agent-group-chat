@@ -28,7 +28,9 @@
 
   .chat-area { flex: 1; display: flex; flex-direction: column; }
   .chat-header { padding: 14px 20px; border-bottom: 1px solid #333; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
-  .chat-header .status { font-size: 12px; color: #888; font-weight: normal; }
+  .chat-header .status-group { font-size: 12px; color: #888; font-weight: normal; display: flex; gap: 12px; }
+  .chat-header .status-ok { color: #4caf50; }
+  .chat-header .status-warn { color: #ff9800; }
   .messages { flex: 1; overflow-y: auto; padding: 20px; }
   .msg { margin-bottom: 16px; max-width: 75%; }
   .msg-user { margin-left: auto; }
@@ -38,6 +40,11 @@
   .msg-agent .msg-bubble { background: #2a2d33; border-bottom-left-radius: 2px; }
   .msg-system .msg-bubble { background: transparent; color: #888; font-style: italic; text-align: center; max-width: 100%; }
 
+  /* 正在输入指示器 */
+  .typing-indicator { padding: 8px 20px; font-size: 13px; color: #888; font-style: italic; }
+  .typing-dots::after { content: ''; animation: dots 1.5s steps(4, end) infinite; }
+  @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+
   .input-area { padding: 16px 20px; border-top: 1px solid #333; display: flex; gap: 10px; }
   .input-area textarea { flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid #333; background: #2a2d33; color: #fff; font-size: 14px; resize: none; height: 44px; font-family: inherit; }
   .input-area button { padding: 0 20px; border-radius: 8px; border: none; background: #5b8def; color: #fff; cursor: pointer; font-size: 14px; }
@@ -45,12 +52,16 @@
 
   .rightbar { width: 240px; background: #22252b; border-left: 1px solid #333; padding: 16px; overflow-y: auto; }
   .rightbar h3 { font-size: 13px; color: #888; margin-bottom: 10px; text-transform: uppercase; }
-  .member-item { padding: 6px 0; font-size: 14px; }
+  .member-item { padding: 6px 0; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+  .member-status { font-size: 11px; color: #888; }
+  .member-status.thinking { color: #ff9800; }
+  .member-status.replying { color: #4caf50; }
+  .member-status.error { color: #e06c6c; }
 </style>
 </head>
 <body>
 
-<!-- 配置后端地址页 -->
+<!-- 配置页 -->
 <div id="setup-page">
   <h1>Agent Group Chat</h1>
   <p style="color:#888;font-size:14px;">连接本地后端服务器</p>
@@ -61,27 +72,28 @@
 
 <!-- 主界面 -->
 <div id="main-page">
-  <!-- 左侧：群列表 -->
   <div class="sidebar">
     <div class="sidebar-header">群聊</div>
     <div class="group-list" id="group-list"></div>
     <div class="new-group-btn" onclick="createGroup()">+ 新建群</div>
   </div>
 
-  <!-- 中间：聊天窗口 -->
   <div class="chat-area">
     <div class="chat-header">
       <span id="current-group-name">选择一个群</span>
-      <span class="status" id="ws-status">未连接</span>
+      <span class="status-group">
+        <span id="ws-status">WS: 未连接</span>
+        <span id="opencode-status">opencode: 检测中...</span>
+      </span>
     </div>
     <div class="messages" id="messages"></div>
+    <div class="typing-indicator" id="typing-indicator" style="display:none;"></div>
     <div class="input-area">
-      <textarea id="input" placeholder="输入消息... (@角色名 可以指定回复者)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"></textarea>
+      <textarea id="input" placeholder="输入消息... (@角色名 指定回复 / 不提则相关角色自动回应)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"></textarea>
       <button onclick="sendMessage()">发送</button>
     </div>
   </div>
 
-  <!-- 右侧：成员列表 -->
   <div class="rightbar">
     <h3>群成员</h3>
     <div id="member-list">（未选择群）</div>
@@ -94,6 +106,7 @@
 let backendUrl = '';
 let currentGroup = '';
 let ws = null;
+let agentStates = {}; // agentId -> { status, startedAt }
 
 // ── 连接后端 ──
 async function connectBackend() {
@@ -107,9 +120,24 @@ async function connectBackend() {
     document.getElementById('main-page').style.display = 'flex';
     loadGroups();
     loadRoles();
+    checkOpencodeHealth();
   } catch (e) {
     document.getElementById('setup-error').textContent = '无法连接到 ' + url + '，请确认后端已启动';
   }
+}
+
+// ── opencode 健康检查 ──
+async function checkOpencodeHealth() {
+  try {
+    const res = await fetch(backendUrl + '/api/health/opencode');
+    const data = await res.json();
+    const el = document.getElementById('opencode-status');
+    if (data.ok) {
+      el.innerHTML = 'opencode: <span class="status-ok">✓ ' + (data.version || '已安装') + '</span>';
+    } else {
+      el.innerHTML = 'opencode: <span class="status-warn">⚠ 未安装</span>';
+    }
+  } catch {}
 }
 
 // ── 群列表 ──
@@ -136,42 +164,57 @@ function createGroup() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, projectDir: dir })
-  }).then(r => r.json()).then(() => {
-    loadGroups();
-  });
+  }).then(r => r.json()).then(() => loadGroups());
 }
 
-// ── 选择群、加载消息 ──
+// ── 选择群 ──
 async function selectGroup(name) {
   currentGroup = name;
+  agentStates = {};
   document.getElementById('current-group-name').textContent = name;
   document.querySelectorAll('.group-item').forEach(el => el.classList.remove('active'));
   loadGroups();
 
   const res = await fetch(backendUrl + '/api/groups/' + encodeURIComponent(name) + '/messages');
-  const msgs = await res.json();
-  renderMessages(msgs);
+  renderMessages(await res.json());
 
   const mres = await fetch(backendUrl + '/api/groups/' + encodeURIComponent(name) + '/members');
-  const members = await mres.json();
-  document.getElementById('member-list').innerHTML = members.length
-    ? members.map(m => '<div class="member-item">' + m + '</div>').join('')
-    : '<div style="color:#666;font-size:13px;">暂无成员，从右侧角色库添加</div>';
+  renderMembers(await mres.json());
 
   connectWS(name);
 }
 
+function renderMembers(members) {
+  const el = document.getElementById('member-list');
+  if (!members.length) {
+    el.innerHTML = '<div style="color:#666;font-size:13px;">暂无成员，从右侧角色库添加</div>';
+    return;
+  }
+  el.innerHTML = members.map(m => {
+    const st = agentStates[m];
+    let statusHtml = '';
+    if (st) {
+      const cls = st.status !== 'idle' && st.status !== 'done' ? st.status : '';
+      const label = st.status === 'thinking' ? '思考中...' : st.status === 'replying' ? '回复中...' : st.status === 'error' ? '出错' : '';
+      statusHtml = label ? '<span class="member-status ' + cls + '">' + label + '</span>' : '';
+    }
+    return '<div class="member-item"><span>' + m + '</span>' + statusHtml + '</div>';
+  }).join('');
+}
+
 function renderMessages(msgs) {
   const el = document.getElementById('messages');
-  el.innerHTML = msgs.map(m => {
-    const cls = m.fromType === 'user' ? 'msg msg-user' : m.fromType === 'agent' ? 'msg msg-agent' : 'msg msg-system';
-    const time = new Date(m.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-    return '<div class="' + cls + '">' +
-      '<div class="msg-meta">' + m.from + ' · ' + time + '</div>' +
-      '<div class="msg-bubble">' + escapeHtml(m.text) + '</div>' +
-    '</div>';
-  }).join('');
+  el.innerHTML = msgs.map(m => msgHtml(m)).join('');
   el.scrollTop = el.scrollHeight;
+}
+
+function msgHtml(m) {
+  const cls = m.fromType === 'user' ? 'msg msg-user' : m.fromType === 'agent' ? 'msg msg-agent' : 'msg msg-system';
+  const time = new Date(m.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  return '<div class="' + cls + '">' +
+    '<div class="msg-meta">' + m.from + ' · ' + time + '</div>' +
+    '<div class="msg-bubble">' + escapeHtml(m.text) + '</div>' +
+  '</div>';
 }
 
 // ── WebSocket ──
@@ -180,24 +223,40 @@ function connectWS(group) {
   const proto = backendUrl.startsWith('https') ? 'wss' : 'ws';
   const host = backendUrl.replace(/^https?:\/\//, '');
   ws = new WebSocket(proto + '://' + host + '/ws?group=' + encodeURIComponent(group));
-  ws.onopen = () => { document.getElementById('ws-status').textContent = '已连接'; };
-  ws.onclose = () => { document.getElementById('ws-status').textContent = '断开'; };
+  ws.onopen = () => { document.getElementById('ws-status').textContent = 'WS: 已连接'; };
+  ws.onclose = () => { document.getElementById('ws-status').textContent = 'WS: 断开'; };
   ws.onmessage = (ev) => {
     const data = JSON.parse(ev.data);
-    if (data.type === 'message' && data.group === group) {
+    if (data.group !== group) return;
+
+    if (data.type === 'message') {
       const el = document.getElementById('messages');
-      const m = data.data;
-      const cls = m.fromType === 'user' ? 'msg msg-user' : m.fromType === 'agent' ? 'msg msg-agent' : 'msg msg-system';
-      const time = new Date(m.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-      el.insertAdjacentHTML('beforeend',
-        '<div class="' + cls + '">' +
-          '<div class="msg-meta">' + m.from + ' · ' + time + '</div>' +
-          '<div class="msg-bubble">' + escapeHtml(m.text) + '</div>' +
-        '</div>'
-      );
+      el.insertAdjacentHTML('beforeend', msgHtml(data.data));
       el.scrollTop = el.scrollHeight;
     }
+
+    if (data.type === 'agent_status') {
+      agentStates = data.data;
+      updateTypingIndicator();
+      // 刷新成员列表的状态
+      fetch(backendUrl + '/api/groups/' + encodeURIComponent(group) + '/members')
+        .then(r => r.json())
+        .then(members => renderMembers(members));
+    }
   };
+}
+
+function updateTypingIndicator() {
+  const thinking = Object.entries(agentStates)
+    .filter(([_, s]) => s.status === 'thinking' || s.status === 'replying')
+    .map(([id, s]) => id + (s.status === 'thinking' ? ' 思考中' : ' 回复中'));
+  const el = document.getElementById('typing-indicator');
+  if (thinking.length) {
+    el.style.display = 'block';
+    el.innerHTML = '<span class="typing-dots">' + thinking.join('，') + '</span>';
+  } else {
+    el.style.display = 'none';
+  }
 }
 
 // ── 发消息 ──
@@ -206,7 +265,6 @@ async function sendMessage() {
   const text = input.value.trim();
   if (!text || !currentGroup) return;
   input.value = '';
-
   await fetch(backendUrl + '/api/groups/' + encodeURIComponent(currentGroup) + '/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -220,12 +278,12 @@ async function loadRoles() {
   const roles = await res.json();
   const el = document.getElementById('roles-list');
   if (!roles.length) {
-    el.innerHTML = '<div style="color:#666;font-size:13px;">暂无角色，放到 ~/.agc/roles/ 目录</div>';
+    el.innerHTML = '<div style="color:#666;font-size:13px;">暂无角色</div>';
     return;
   }
   el.innerHTML = roles.map(r =>
-    '<div class="member-item">' + r.emoji + ' ' + r.name +
-      ' <button onclick="addMember(\'' + r.id + '\')" style="float:right;font-size:11px;cursor:pointer;">+</button>' +
+    '<div class="member-item"><span>' + r.emoji + ' ' + r.name + '</span>' +
+      '<button onclick="addMember(\'' + r.id + '\')" style="font-size:11px;cursor:pointer;">+</button>' +
     '</div>'
   ).join('');
 }
@@ -238,16 +296,13 @@ async function addMember(agentId) {
     body: JSON.stringify({ agentId })
   });
   const mres = await fetch(backendUrl + '/api/groups/' + encodeURIComponent(currentGroup) + '/members');
-  const members = await mres.json();
-  document.getElementById('member-list').innerHTML = members.map(m => '<div class="member-item">' + m + '</div>').join('');
+  renderMembers(await mres.json());
 }
 
-// ── 工具 ──
 function escapeHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// ── 启动时：如果有保存的后端地址，自动连 ──
 window.onload = () => {
   const saved = localStorage.getItem('agc_backend');
   if (saved) {
