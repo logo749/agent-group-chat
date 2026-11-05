@@ -5,28 +5,37 @@ export interface Message {
   from: string;
   fromType: 'user' | 'agent' | 'system';
   text: string;
-  at: string;           // ISO 时间
-  mentions?: string[];  // @了哪些角色
-  replyTo?: string;     // 回复哪条消息
+  at: string;
+  mentions?: string[];
+  replyTo?: string;
 }
 
 export interface GroupConfig {
+  id: string;
   name: string;
-  projectDir: string;       // 项目文件夹路径（opencode 干活的地方）
-  members: string[];        // 成员角色 id 列表
+  projectDir: string;
+  members: string[];
   createdAt: string;
 }
 
 export interface AgentDefinition {
-  id: string;              // 角色 id，如 "product-manager"
-  name: string;             // 显示名，如 "产品经理"
+  id: string;
+  name: string;
   description: string;
   emoji: string;
-  systemPrompt: string;     // 正文（frontmatter 之后的内容）
+  systemPrompt: string;
+  builtin?: boolean; // 是否内置角色（内置的不能删，只能复制？或者也能删？）
 }
 
+export type WSMessageType =
+  | 'message'
+  | 'agent_status'
+  | 'group_created'
+  | 'group_updated'
+  | 'group_deleted';
+
 export interface WSMessage {
-  type: 'message' | 'group_created' | 'group_updated';
+  type: WSMessageType;
   group: string;
   data: unknown;
 }
