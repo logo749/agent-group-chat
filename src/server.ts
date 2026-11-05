@@ -1,6 +1,6 @@
 /**
  * 主服务器：Express HTTP API + WebSocket 实时推送
- * Phase 1：基础聊天功能（发消息、看消息、群管理）
+ * Phase 2：集成 opencode 角色调度 + 状态显示
  */
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -10,9 +10,11 @@ import { randomUUID } from 'node:crypto';
 import {
   initStore, createGroup, listGroups, getGroup, saveGroup,
   appendMessage, listMessages, getAnnouncement, saveAnnouncement,
-  listAgents
+  listAgents, getAgent
 } from './store.js';
 import type { Message } from './types.js';
+import { triggerAgents, setStatusCallback, getGroupStates, type AgentState } from './agent-runner.js';
+import { checkOpencode } from './opencode.js';
 
 const PORT = parseInt(process.env.AGC_PORT || '8787', 10);
 
@@ -37,25 +39,37 @@ app.use(express.static(join(process.cwd(), 'public')));
 const server = createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
-// WebSocket 连接池：按群分组，新消息时推给该群的所有客户端
+// WebSocket 连接池：按群分组
 const clients = new Map<string, Set<WebSocket>>(); // groupName -> sockets
 
-function broadcast(group: string, data: unknown) {
+function broadcast(group: string, type: string, data: unknown) {
   const set = clients.get(group);
   if (!set) return;
-  const payload = JSON.stringify({ type: 'message', group, data });
+  const payload = JSON.stringify({ type, group, data });
   for (const ws of set) {
     if (ws.readyState === WebSocket.OPEN) ws.send(payload);
   }
 }
 
+// ── 注入状态回调：角色状态变化时广播给前端 ──
+setStatusCallback((groupName, states) => {
+  const obj: Record<string, AgentState> = {};
+  for (const [k, v] of states) obj[k] = v;
+  broadcast(groupName, 'agent_status', obj);
+});
+
 wss.on('connection', (ws, req) => {
-  // 从 URL query 解析要监听的群名：/ws?group=xxx
   const url = new URL(req.url || '', `http://localhost:${PORT}`);
   const group = url.searchParams.get('group');
   if (group) {
     if (!clients.has(group)) clients.set(group, new Set());
     clients.get(group)!.add(ws);
+    // 连上后立刻推当前状态
+    ws.send(JSON.stringify({
+      type: 'agent_status',
+      group,
+      data: getGroupStates(group)
+    }));
   }
 
   ws.on('close', () => {
@@ -109,8 +123,24 @@ app.post('/api/groups/:name/messages', (req, res) => {
   };
 
   appendMessage(req.params.name, msg);
-  broadcast(req.params.name, msg);
+  broadcast(req.params.name, 'message', msg);
   res.json(msg);
+
+  // 异步触发角色回复（不阻塞 HTTP 响应）
+  const groupName = req.params.name;
+  triggerAgents(groupName, msg, (agentId, replyText) => {
+    const agent = getAgent(agentId);
+    const replyMsg: Message = {
+      id: randomUUID(),
+      from: agent?.name || agentId,
+      fromType: 'agent',
+      text: replyText,
+      at: new Date().toISOString(),
+      mentions: [],
+    };
+    appendMessage(groupName, replyMsg);
+    broadcast(groupName, 'message', replyMsg);
+  });
 });
 
 // ── API：群公告 ──
@@ -157,6 +187,19 @@ app.get('/api/roles', (_req, res) => {
   res.json(listAgents());
 });
 
+// ── API：角色状态 ──
+
+app.get('/api/groups/:name/agent-status', (req, res) => {
+  res.json(getGroupStates(req.params.name));
+});
+
+// ── API：opencode 健康检查 ──
+
+app.get('/api/health/opencode', async (_req, res) => {
+  const result = await checkOpencode();
+  res.json(result);
+});
+
 // ── 工具函数：解析消息里的 @角色 ──
 
 function parseMentions(text: string): string[] {
@@ -168,6 +211,15 @@ function parseMentions(text: string): string[] {
 // ── 启动 ──
 
 initStore();
+
+// 启动时检查 opencode
+checkOpencode().then(result => {
+  if (result.ok) {
+    console.log(`  opencode 检测到：${result.version}`);
+  } else {
+    console.log(`  ⚠️ opencode 未安装，请先运行：npm install -g opencode-ai && opencode auth login`);
+  }
+});
 
 server.listen(PORT, () => {
   console.log(`\n  Agent Group Chat 服务器已启动`);
