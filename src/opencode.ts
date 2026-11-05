@@ -32,6 +32,12 @@ function parseNdjson(stdout: string): string {
   return parts.join('').trim();
 }
 
+// spawn 公共选项：shell: true 保证能找到 nvm 等方式安装的命令
+const SPAWN_OPTS = {
+  stdio: ['pipe', 'pipe', 'pipe'] as ['pipe', 'pipe', 'pipe'],
+  shell: true,
+};
+
 /**
  * 调用 opencode run
  * @param systemPrompt 角色设定（走 stdin 传入）
@@ -47,12 +53,10 @@ export async function runOpencode(
 
   return new Promise((resolve) => {
     // opencode run --format json --dir <目录> "<消息>"
-    // system prompt 走 stdin，用 <system>...</system> 包装
-    const args = ['run', '--format', 'json', '--dir', projectDir, userMessage];
-    
-    const proc = spawn('opencode', args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    // 用 shell: true 拼命令，避免 PATH 问题
+    const cmd = `opencode run --format json --dir "${projectDir}" "${userMessage.replace(/"/g, '\\"')}"`;
+
+    const proc = spawn(cmd, SPAWN_OPTS);
 
     let stdout = '';
     let stderr = '';
@@ -92,21 +96,39 @@ export async function runOpencode(
 
 /**
  * 检查 opencode 是否可用（快速测试）
+ * 试几种常见的版本命令，shell: true 保证 PATH 正确
  */
 export async function checkOpencode(): Promise<{ ok: boolean; version?: string; error?: string }> {
+  const commands = [
+    'opencode --version',
+    'opencode -v',
+    'which opencode',
+  ];
+
+  for (const cmd of commands) {
+    const result = await tryCommand(cmd);
+    if (result.ok) {
+      return { ok: true, version: result.output.trim() };
+    }
+  }
+
+  return { ok: false, error: 'opencode 未找到，请确认已安装并在 PATH 中' };
+}
+
+function tryCommand(cmd: string): Promise<{ ok: boolean; output: string }> {
   return new Promise((resolve) => {
-    const proc = spawn('opencode', ['--version'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const proc = spawn(cmd, { ...SPAWN_OPTS, timeout: 3000 });
     let out = '';
+    let err = '';
     proc.stdout.on('data', (d) => { out += d.toString(); });
+    proc.stderr.on('data', (d) => { err += d.toString(); });
     proc.on('close', (code) => {
-      if (code === 0) {
-        resolve({ ok: true, version: out.trim() });
+      if (code === 0 && out.trim()) {
+        resolve({ ok: true, output: out });
       } else {
-        resolve({ ok: false, error: 'opencode 未安装或不可用' });
+        resolve({ ok: false, output: out || err });
       }
     });
-    proc.on('error', () => {
-      resolve({ ok: false, error: 'opencode 未安装' });
-    });
+    proc.on('error', () => resolve({ ok: false, output: '' }));
   });
 }
